@@ -1,4 +1,5 @@
-import "dart:math";
+import 'dart:math';
+import 'string_ext.dart';
   
 typedef RowCreator<R> = R Function(int index);
 typedef ColGroupCreator<G> = G Function(int index);
@@ -224,41 +225,6 @@ class Grid<R, G, C, L> {
   }
 }
 
-extension Ellipsis on String {
-  /// Обрезает строку и добавляет к ней троеточие (ellipsis), если она больше заданного размера
-  /// @param {int} width Максимальная длина строки
-  /// @param {String} ellipsis='…' Своё троеточие, если символ '…' не устраивает
-  /// @param {string} trim=true Удалять пробелы перед ellipsis
-  String cut(int width, {String ellipsis = '…', bool trim = true}) {
-    if (length <= width) return this;
-
-    // В заданный размер должен войти хотя бы один символ строки и троеточие
-    if (width < ellipsis.length) return '';
-
-    var result = substring(0, width - ellipsis.length);
-    if (trim) result = result.trimRight();
-    
-    return result + ellipsis;
-  }
-
-  String pad(int width, [String padding]) {
-    return padLeft((width + length) ~/ 2, padding).padRight(width, padding);
-  }
-
-  String cutAndPadLeft( int width, {String ellipsis = '…', bool trim = true, String padding = ' '}) {
-    return cut(width, ellipsis: ellipsis, trim: trim).padLeft(width, padding);
-  }
-
-  String cutAndPadRight( int width, {String ellipsis = '…', bool trim = true, String padding = ' '}) {
-    return cut(width, ellipsis: ellipsis, trim: trim).padRight(width, padding);
-  }
-
-  String cutAndPad( int width, {String ellipsis = '…', bool trim = true, String padding = ' '}) {
-    return cut(width, ellipsis: ellipsis, trim: trim).pad(width, padding);
-  }
-}
-
-
 void main() {
   var grid1 = Grid<String, String, String, String>()
     ..addRow('Row 0')
@@ -318,39 +284,4 @@ void main() {
   // print(grid4.group(0).value is Null);
   // print(grid1.col(5));
   //print(grid4.col(0) is Null);
-
-  f<String>();
-  f<int>();
-  f<double>();
-  f<Void>();
-  f<Void2>();
-
-  if (isType<Void, Void>()) print('+Void');
-  if (isType<Void2, Void>()) print('+Void');
-  if (isType<Void2, Void2>()) print('+Void');
-}
-
-bool isType<T1, T2>() => _TypeOf<T1>() is _TypeOf<T2>;
-class _TypeOf<T> {}
-
-class Void {
-  const Void._();
-}
-
-class Void2 extends Void {
-  const Void2._() : super._();
-}
-
-final fact = <Type, Function>{
-  String: () => print('String'),
-  int: () => print('int'),
-  double: () => print('double'),
-  Void: () => print('Void'),
-  Void2: () => print('Void2'),
-};
-
-void f<T>() {
-  fact[T]?.call();
-
-  if (T == String) print('STRING!!!');
 }

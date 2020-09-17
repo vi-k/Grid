@@ -1,1 +1,1 @@
-dart --enable-experiment=non-nullable bin/grid.dart
+dart run --enable-experiment=non-nullable

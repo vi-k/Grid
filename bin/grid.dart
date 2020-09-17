@@ -1,222 +1,145 @@
-import 'dart:math';
-import 'string_ext.dart';
+import 'dart:collection';
+import "dart:math";
   
-typedef RowCreator<R> = R Function(int index);
-typedef ColGroupCreator<G> = G Function(int index);
-typedef ColCreator<C> = C Function(int index);
-typedef CellCreator<L> = L Function(int row, int col);
+typedef TCreator<T> = T Function(int index);
+typedef CellCreator<T> = T Function(int row, int col);
 
-class GridRow<R, L> {
-  R value;
-  final List<L> _cells = [];
+class GridRow<TRow, TCell> extends IterableBase<TCell> {
+  TRow value;
+  final List<TCell> _cells = [];
 
-  GridRow._(this.value, int rowIndex, int colsCount, CellCreator? cellCreate) {
+  GridRow._(this.value, int rowIndex, int colsCount, CellCreator? cellCreator) {
     for (var i = 0; i < colsCount; i++) {
-      L cell = cellCreate?.call(rowIndex, i) as L;
-      _cells.add(cell);
+      _cells.add(cellCreator?.call(rowIndex, i) as TCell);
     }
   }
   
-  L operator [](int index) => _cells[index]; 
+  TCell operator [](int index) => _cells[index];
+
+  @override
+  Iterator<TCell> get iterator => _cells.iterator;
 }
 
-class GridColGroup<R, G, C, L> {
-  final Grid<R, G, C, L> grid;
-  G value;
 
-  final List<C> _cols = [];
-  C operator [](int index) => _cols[index];
-
-  int get colsCount => _cols.length;
-
-  GridColGroup._(this.grid, this.value);
+class Grid<TRow, TCol, TCell> extends IterableBase<GridRow<TRow, TCell>> {
+  final TCreator<TRow>? _rowCreator;
+  final TCreator<TCol>? _colCreator;
+  final CellCreator<TCell>? _cellCreator;
   
-  int _getLeftColumnsCount() {
-    var count = 0;
-    for (var g in grid._colGroups) {
-      if (g == this) break;
-      count += g.colsCount;
-    }
-    return count;
-  }
-
-  void addCol([C? value, CellCreator? cellCreate]) {
-    final colIndex = _getLeftColumnsCount() + colsCount;
-    cellCreate = cellCreate ?? grid.cellCreate;   
-         
-    _cols.add(value as C);
-    
-    for (var i = 0; i < grid.rowsCount; i++) {
-      grid._rows[i]._cells.insert(colIndex, cellCreate?.call(i, colIndex) as L);
-    }
-  }
-
-  void addCols(int count, [ColCreator<C>? colCreate, CellCreator? cellCreate]) {
-    colCreate = colCreate ?? grid.colCreate;
-    cellCreate = cellCreate ?? grid.cellCreate;   
-    var colIndex = _getLeftColumnsCount() + colsCount;
-
-    while (count-- > 0) {
-      _cols.add(colCreate?.call(colIndex) as C);
-      
-      for (var i = 0; i < grid.rowsCount; i++) {
-        grid._rows[i]._cells.insert(colIndex, cellCreate?.call(i, colIndex) as L);
-      }
-
-      colIndex++;
-    }
-  }
-}
-
-class Grid<R, G, C, L> {
-  final RowCreator<R>? rowCreate;
-  final ColGroupCreator<G>? colGroupCreate;
-  final ColCreator<C>? colCreate;
-  final CellCreator<L>? cellCreate;
-  
-  final List<GridRow<R, L>> _rows = [];
-  final List<GridColGroup<R, G, C, L>> _colGroups = [];
-
-  int get rowsCount => _rows.length;
-  int get colGroupsCount => _colGroups.length;
-  int get colsCount => _colGroups.fold(0, (prev, group) => prev + group.colsCount);
+  final List<GridRow<TRow, TCell>> _rows = [];
+  final List<TCol> _cols = [];
 
   Grid({
-    this.rowCreate,
-    this.colGroupCreate, 
-    this.colCreate, 
-    this.cellCreate,
-  });
+    CellCreator<TCell>? cell,
+    TCreator<TRow>? row,
+    TCreator<TCol>? col, 
+  }) : _rowCreator = row,
+       _colCreator = col,
+       _cellCreator = cell;
 
-  GridRow<R, L> operator [](int index) => _rows[index];
-  
-  GridColGroup<R, G, C, L> group(int index) => _colGroups[index];
-  
-  C col(int index) {
-    var i = index;
-    for (var g in _colGroups) {
-      if (i < g.colsCount) return g[i];
-      i -= g.colsCount;
-    }
+  int get rowsCount => _rows.length;
+  int get colsCount => _cols.length;
 
-    throw RangeError.range(index, 0, colsCount - 1);
+  GridRow<TRow, TCell> operator [](int index) => _rows[index];
+  
+  TCol col(int index) => _cols[index];
+
+
+  void insertRow(int index, {TRow? row, CellCreator? cell}) {
+    _rows.insert(index, GridRow<TRow, TCell>._(row as TRow, rowsCount, colsCount, cell ?? this._cellCreator));
   }
 
-  void addRow([R? value, CellCreator? cellCreate]) {
-    _rows.add(GridRow<R, L>._(value as R, rowsCount, colsCount, cellCreate ?? this.cellCreate));
-  }
-  
-  void addRows(int count, [RowCreator<R>? rowCreate, CellCreator? cellCreate]) {
-    rowCreate = rowCreate ?? this.rowCreate;
+  void insertRows(int count, int index, {TCreator<TRow>? row, CellCreator? cell}) {
+    row = row ?? this._rowCreator;
     while (count-- > 0) {
-      _rows.add(GridRow<R, L>._(rowCreate?.call(rowsCount) as R, rowsCount, colsCount, cellCreate ?? this.cellCreate));
+      insertRow(index, row: row?.call(rowsCount) as TRow, cell: cell);
+      index++;
     }
   }
 
-  void addColGroup([G? value]) {
-    _colGroups.add(GridColGroup<R, G, C, L>._(this, value as G));
+  void addRow({TRow? row, CellCreator? cell}) => insertRow(rowsCount, row: row, cell: cell);  
+  void addRows(int count, {TCreator<TRow>? row, CellCreator? cell}) => insertRows(count, rowsCount, row: row, cell: cell);
+
+
+  void insertCol(int index, {TCol? col, CellCreator? cell}) {
+    cell = cell ?? _cellCreator;
+         
+    _cols.insert(index, (col ?? _colCreator?.call(index)) as TCol);
+
+    for (var i = 0; i < rowsCount; i++) {
+      _rows[i]._cells.insert(index, cell?.call(i, index) as TCell);
+    }
   }
 
-  void addColGroups(int count, [ColGroupCreator<G>? colGroupCreate]) {
-    colGroupCreate = colGroupCreate ?? this.colGroupCreate;
+  void insertCols(int count, int index, {TCreator<TCol>? col, CellCreator? cell}) {
+    col = col ?? _colCreator;
+    cell = cell ?? _cellCreator;   
+
     while (count-- > 0) {
-      _colGroups.add(GridColGroup<R, G, C, L>._(this, colGroupCreate?.call(colGroupsCount) as G));
+      insertCol(index, col: col?.call(index), cell: cell);
+      index++;
     }
   }
+
+  void addCol({TCol? col, CellCreator? cell}) => insertCol(colsCount, col: col, cell: cell);  
+  void addCols(int count, {TCreator<TCol>? col, CellCreator? cell}) => insertCols(count, colsCount, col: col, cell: cell);
+
+
+  @override
+  Iterator<GridRow<TRow, TCell>> get iterator => _rows.iterator;
 
 
   @override
   String toString([int? maxWidth]) {
     final buf = StringBuffer();
-    final buf2 = StringBuffer();
-    final widths = List<int>.filled(colsCount + 1, 0);
+    var firstWidth = 0;
+    final widths = List<int>.filled(colsCount, 0);
 
     // Ширина столбца с названиями строк
     for (var i = 0; i < rowsCount; i++) {
       final value = (_rows[i].value ?? '[$i]').toString();
-      if (widths[0] < value.length) widths[0] = maxWidth == null ? value.length : min(value.length, maxWidth);
+      if (firstWidth < value.length) firstWidth = maxWidth == null ? value.length : min(value.length, maxWidth);
     }
 
-    // Ширина остальных столбцов
-    for (var i = 0; i < rowsCount; i++) {
-      // По названиям колонок
-      for (var i = 0; i < colGroupsCount; i++) {
-        final colGroup = group(i);
-        
-        for (var j = 0; j < colGroup.colsCount; j++) {
-          final value = (colGroup[j] ?? '[$j]').toString();
-          if (widths[j + 1] < value.length) widths[j + 1] = maxWidth == null ? value.length : min(value.length, maxWidth);
-        }
-      }
+    // Ширина столбцов по названиям
+    for (var i = 0; i < colsCount; i++) {
+      final value = (_cols[i] ?? '[$i]').toString();
+      if (widths[i] < value.length) widths[i] = maxWidth == null ? value.length : min(value.length, maxWidth);
+    }
 
-      // По значениям ячеек
-      for (var j = 0; j < colsCount; j++) {
-        final value = _rows[i][j].toString();
-        if (widths[j + 1] < value.length) widths[j + 1] = maxWidth == null ? value.length : min(value.length, maxWidth);
+    // Ширина столбцов по значениям ячеек
+    for (var row in this) {
+      for (var i = 0; i < colsCount; i++) {
+        final value = row[i].toString();
+        if (widths[i] < value.length) widths[i] = maxWidth == null ? value.length : min(value.length, maxWidth);
       }
     }
 
-    // Строка с названиями групп
-    final indent = ' ' * widths[0];
-    buf.write(indent);
-    buf2.write(indent);
+    final indent = ' ' * firstWidth;
 
-    var col = 0;
-    for (var i = 0; i < colGroupsCount; i++) {
-      final colGroup = group(i);
-      
-      var maxWidth = 0;
-      for (var j = 0; j < colGroup.colsCount; j++) {
-        maxWidth += widths[++col] + (j == 0 ? 0 : 2);
-      }
-
-      buf.write('    ');
-      buf.write((colGroup.value ?? '[$i]').toString().cutAndPad(maxWidth));
-      
-      buf2.write('    ');
-      buf2.write('=' * maxWidth);
-    }
-    buf.write('\n');
-    buf.write(buf2.toString());
-    buf.write('\n');
-    
     // Строка с названиями колонок
     buf.write(indent);
-    buf2.clear();
-    buf2.write(indent);
-
-    col = 0;
-    for (var i = 0; i < colGroupsCount; i++) {
-      final colGroup = group(i);
-      
-      for (var j = 0; j < colGroup.colsCount; j++) {
-        final w = widths[col + 1];
-          buf.write(j == 0 ? '    ' : '  ');
-          buf.write((colGroup[j] ?? '[$col]').toString().cutAndPad(w));
-
-          buf2.write(j == 0 ? '    ' : '  ');
-          buf2.write('-' * w);
-          col++;
-      }
+    for (var i = 0; i < colsCount; i++) {
+      buf.write('  ');
+      buf.write((_cols[i] ?? '[$i]').toString().cutAndPad(widths[i]));
     }
     buf.write('\n');
-    buf.write(buf2.toString());
+
+    buf.write(indent);
+    for (var i = 0; i < colsCount; i++) {
+      buf.write('  ');
+      buf.write('-' * widths[i]);
+    }
     buf.write('\n');
 
     // Таблица
     for (var i = 0; i < rowsCount; i++) {
       final row = _rows[i];
-      buf.write((row.value ?? '[$i]').toString().cutAndPadRight(widths[0]));
+      buf.write((row.value ?? '[$i]').toString().cutAndPadRight(firstWidth));
 
-      var col = 0;
-      for (var i = 0; i < colGroupsCount; i++) {
-        final colGroup = group(i);
-        
-        for (var j = 0; j < colGroup.colsCount; j++) {
-          buf.write(j == 0 ? '    ' : '  ');
-          buf.write(row[col].toString().cutAndPadRight(widths[col + 1]));
-          col++;
-        }
+      for (var j = 0; j < colsCount; j++) {
+        buf.write('  ');
+        buf.write(row[j].toString().cutAndPadRight(widths[j]));
       }
       buf.write('\n');
     }
@@ -225,63 +148,77 @@ class Grid<R, G, C, L> {
   }
 }
 
+extension Ellipsis on String {
+  /// Обрезает строку и добавляет к ней троеточие (ellipsis), если она больше заданного размера
+  /// @param {int} width Максимальная длина строки
+  /// @param {String} ellipsis='…' Своё троеточие, если символ '…' не устраивает
+  /// @param {string} trim=true Удалять пробелы перед ellipsis
+  String cut(int width, {String ellipsis = '…', bool trim = true}) {
+    if (length <= width) return this;
+
+    // В заданный размер должен войти хотя бы один символ строки и троеточие
+    if (width < ellipsis.length) return '';
+
+    var result = substring(0, width - ellipsis.length);
+    if (trim) result = result.trimRight();
+    
+    return result + ellipsis;
+  }
+
+  String pad(int width, [String padding]) {
+    return padLeft((width + length) ~/ 2, padding).padRight(width, padding);
+  }
+
+  String cutAndPadLeft( int width, {String ellipsis = '…', bool trim = true, String padding = ' '}) {
+    return cut(width, ellipsis: ellipsis, trim: trim).padLeft(width, padding);
+  }
+
+  String cutAndPadRight( int width, {String ellipsis = '…', bool trim = true, String padding = ' '}) {
+    return cut(width, ellipsis: ellipsis, trim: trim).padRight(width, padding);
+  }
+
+  String cutAndPad( int width, {String ellipsis = '…', bool trim = true, String padding = ' '}) {
+    return cut(width, ellipsis: ellipsis, trim: trim).pad(width, padding);
+  }
+}
+
+
 void main() {
-  var grid1 = Grid<String, String, String, String>()
-    ..addRow('Row 0')
-    ..addRow('Row 1')
-    ..addRow('Row 2')
-    ..addColGroup('ColGroup 0')
-    ..addColGroup('ColGroup 1')
-    ..addColGroup('ColGroup 2')
-    ..group(0).addCol('Col 0', (row, col) => 'Cell $row.$col')
-    ..group(0).addCol('Col 1', (row, col) => 'Cell $row.$col')
-    ..group(0).addCol('Col 2', (row, col) => 'Cell $row.$col')
-    ..group(1).addCol('Col 3', (row, col) => 'Cell $row.$col')
-    ..group(1).addCol('Col 4', (row, col) => 'Cell $row.$col')
-    ..group(2).addCol('Col 5', (row, col) => 'Cell $row.$col');
+  var grid1 = Grid<String, String, String>()
+    ..addRow(row: 'Row 0')
+    ..addRow(row: 'Row 1')
+    ..addRow(row: 'Row 2')
+    ..addCol(col: 'Col 0', cell: (row, col) => 'Cell $row.$col')
+    ..addCol(col: 'Col 1', cell: (row, col) => 'Cell $row.$col')
+    ..addCol(col: 'Col 2', cell: (row, col) => 'Cell $row.$col')
+    ..addCol(col: 'Col 3', cell: (row, col) => 'Cell $row.$col')
+    ..addCol(col: 'Col 4', cell: (row, col) => 'Cell $row.$col')
+    ..addCol(col: 'Col 5', cell: (row, col) => 'Cell $row.$col');
   
   print(grid1.toString());
   
-  var grid2 = Grid<String, String, String, String>()
-    ..addRows(3, (index) => 'Row $index')
-    ..addColGroups(3, (index) => 'ColGroup $index')
-    ..group(0).addCols(3, (index) => 'Col $index', (row, col) => 'Cell $row.$col')
-    ..group(1).addCols(2, (index) => 'Col $index', (row, col) => 'Cell $row.$col')
-    ..group(2).addCols(1, (index) => 'Col $index', (row, col) => 'Cell $row.$col');
+  var grid2 = Grid<String, String, String>()
+    ..addRows(3, row: (index) => 'Row $index')
+    ..addCols(5, col: (index) => 'Col $index', cell: (row, col) => 'Cell $row.$col')
+    ..addCol(col: 'Col 5', cell: (row, col) => 'Cell $row.$col');
   
   print(grid2.toString());
 
-  var grid3 = Grid<String, String, String, String>(
-    rowCreate: (index) => 'Row $index',
-    colGroupCreate: (index) => 'ColGroup $index',
-    colCreate: (index) => 'Col $index',
-    cellCreate: (row, col) => 'Cell $row.$col',
+  var grid3 = Grid<String, String, String>(
+    cell: (row, col) => '$row.$col',
+    row: (index) => 'Row $index',
+    col: (index) => 'Col $index',
   )
     ..addRows(3)
-    ..addColGroups(3)
-    ..group(0).addCols(3)
-    ..group(1).addCols(2)
-    ..group(2).addCols(1);
+    ..addCols(6);
   
   print(grid3.toString());
 
-  var z = <void>[];
-  var grid4 = Grid<Void, Null, Null, String>(
-    cellCreate: (row, col) => 'Cell $row.$col',
+  var grid4 = Grid<Null, Null, String>(
+    cell: (row, col) => '$row.$col',
   )
-    //..addRows(2)
-    // ..addRow()
-    // ..addRow()
-    // ..addRow()
-    ..addColGroups(3)
-    ..group(0).addCols(3)
-    ..group(1).addCols(2)
-    ..group(2).addCols(1);
+    ..addRows(3)
+    ..addCols(6);
   
   print(grid4.toString());
-
-  //print(grid4[2].value is Null);
-  // print(grid4.group(0).value is Null);
-  // print(grid1.col(5));
-  //print(grid4.col(0) is Null);
 }

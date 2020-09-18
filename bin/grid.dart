@@ -31,12 +31,24 @@ class Grid<TRow, TCol, TCell> extends IterableBase<GridRow<TRow, TCell>> {
   final List<TCol> _cols = [];
 
   Grid({
-    CellCreator<TCell>? cell,
     TCreator<TRow>? row,
     TCreator<TCol>? col, 
+    CellCreator<TCell>? cell,
   }) : _rowCreator = row,
        _colCreator = col,
        _cellCreator = cell;
+
+  Grid.fill(int rowsCount, int colsCount, {
+    TCreator<TRow>? row,
+    TCreator<TCol>? col, 
+    CellCreator<TCell>? cell,
+  }) : _rowCreator = row,
+       _colCreator = col,
+       _cellCreator = cell {
+
+    addRows(rowsCount);
+    addCols(colsCount);
+  }
 
   int get rowsCount => _rows.length;
   int get colsCount => _cols.length;
@@ -149,41 +161,6 @@ class Grid<TRow, TCol, TCell> extends IterableBase<GridRow<TRow, TCell>> {
   }
 }
 
-extension Ellipsis on String {
-  /// Обрезает строку и добавляет к ней троеточие (ellipsis), если она больше заданного размера
-  /// @param {int} width Максимальная длина строки
-  /// @param {String} ellipsis='…' Своё троеточие, если символ '…' не устраивает
-  /// @param {string} trim=true Удалять пробелы перед ellipsis
-  String cut(int width, {String ellipsis = '…', bool trim = true}) {
-    if (length <= width) return this;
-
-    // В заданный размер должен войти хотя бы один символ строки и троеточие
-    if (width < ellipsis.length) return '';
-
-    var result = substring(0, width - ellipsis.length);
-    if (trim) result = result.trimRight();
-    
-    return result + ellipsis;
-  }
-
-  String pad(int width, [String padding]) {
-    return padLeft((width + length) ~/ 2, padding).padRight(width, padding);
-  }
-
-  String cutAndPadLeft( int width, {String ellipsis = '…', bool trim = true, String padding = ' '}) {
-    return cut(width, ellipsis: ellipsis, trim: trim).padLeft(width, padding);
-  }
-
-  String cutAndPadRight( int width, {String ellipsis = '…', bool trim = true, String padding = ' '}) {
-    return cut(width, ellipsis: ellipsis, trim: trim).padRight(width, padding);
-  }
-
-  String cutAndPad( int width, {String ellipsis = '…', bool trim = true, String padding = ' '}) {
-    return cut(width, ellipsis: ellipsis, trim: trim).pad(width, padding);
-  }
-}
-
-
 void main() {
   var grid1 = Grid<String, String, String>()
     ..addRow(row: 'Row 0')
@@ -206,9 +183,9 @@ void main() {
   print(grid2.toString());
 
   var grid3 = Grid<String, String, String>(
-    cell: (row, col) => '$row.$col',
     row: (index) => 'Row $index',
     col: (index) => 'Col $index',
+    cell: (row, col) => '$row.$col',
   )
     ..addRows(3)
     ..addCols(6);
@@ -222,4 +199,16 @@ void main() {
     ..addCols(6);
   
   print(grid4.toString());
+
+  var grid5 = Grid<String, String, String>.fill(3, 6,
+    row: (index) => 'Row $index',
+    col: (index) => 'Col $index',
+    cell: (row, col) => 'Cell $row.$col',
+  );
+  
+  print(grid5.toString());
+
+  var grid6 = Grid<Null, Null, String>.fill(3, 6, cell: (row, col) => '$row.$col');
+  
+  print(grid6.toString());
 }

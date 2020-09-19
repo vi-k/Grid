@@ -6,21 +6,37 @@ typedef TCreator<T> = T Function(int index);
 typedef CellCreator<T> = T Function(int row, int col);
 
 class GridRow<TRow, TCell> extends IterableBase<TCell> {
+  int _index;
   TRow value;
   final List<TCell> _cells = [];
 
-  GridRow._(this.value, int rowIndex, int colsCount, CellCreator? cellCreator) {
+  GridRow._(this.value, int rowIndex, int colsCount, CellCreator? cellCreator) : _index = rowIndex {
+    // Создаём ячейки в новой строке
     for (var i = 0; i < colsCount; i++) {
       _cells.add(cellCreator?.call(rowIndex, i) as TCell);
     }
   }
   
+  int get index => _index;
   TCell operator [](int index) => _cells[index];
 
   @override
   Iterator<TCell> get iterator => _cells.iterator;
 }
 
+class GridCol<TCol> {
+  int _index;
+  TCol value;
+
+  GridCol._(this.value, int colIndex) : _index = colIndex;
+  
+  int get index => _index;
+}
+
+class GridCols<TCol> extends IterableBase<GridCol<TCol>> {
+  final Iterator<GridCol<TCol>> iterator;
+  GridCols._(this.iterator);
+}
 
 class Grid<TRow, TCol, TCell> extends IterableBase<GridRow<TRow, TCell>> {
   final TCreator<TRow>? _rowCreator;
@@ -28,7 +44,7 @@ class Grid<TRow, TCol, TCell> extends IterableBase<GridRow<TRow, TCell>> {
   final CellCreator<TCell>? _cellCreator;
   
   final List<GridRow<TRow, TCell>> _rows = [];
-  final List<TCol> _cols = [];
+  final List<GridCol<TCol>> _cols = [];
 
   Grid({
     TCreator<TRow>? row,
@@ -54,19 +70,35 @@ class Grid<TRow, TCol, TCell> extends IterableBase<GridRow<TRow, TCell>> {
   int get colsCount => _cols.length;
 
   GridRow<TRow, TCell> operator [](int index) => _rows[index];
-  
-  TCol col(int index) => _cols[index];
+ 
+  GridCol<TCol> col(int index) => _cols[index];
+
+  @override
+  Iterator<GridRow<TRow, TCell>> get iterator => _rows.iterator;
+
+  GridCols<TCol> get cols => GridCols<TCol>._(_cols.iterator);
 
 
   void insertRow(int index, {TRow? row, CellCreator? cell}) {
     _rows.insert(index, GridRow<TRow, TCell>._(row as TRow, rowsCount, colsCount, cell ?? this._cellCreator));
+
+    // Корректируем индексы строк снизу
+    for (var i = index + 1; i < rowsCount; i++) {
+      _rows[i]._index = i;
+    }
   }
 
   void insertRows(int count, int index, {TCreator<TRow>? row, CellCreator? cell}) {
     row = row ?? this._rowCreator;
+    
     while (count-- > 0) {
-      insertRow(index, row: row?.call(rowsCount) as TRow, cell: cell);
+      _rows.insert(index, GridRow<TRow, TCell>._(row?.call(rowsCount) as TRow, rowsCount, colsCount, cell ?? this._cellCreator));
       index++;
+    }
+
+    // Корректируем индексы строк снизу
+    for (var i = index; i < rowsCount; i++) {
+      _rows[i]._index = i;
     }
   }
 
@@ -77,10 +109,16 @@ class Grid<TRow, TCol, TCell> extends IterableBase<GridRow<TRow, TCell>> {
   void insertCol(int index, {TCol? col, CellCreator? cell}) {
     cell = cell ?? _cellCreator;
          
-    _cols.insert(index, (col ?? _colCreator?.call(index)) as TCol);
+    _cols.insert(index, GridCol<TCol>._((col ?? _colCreator?.call(index)) as TCol, index));
 
+    // Создаём ячейки в новой колонке
     for (var i = 0; i < rowsCount; i++) {
       _rows[i]._cells.insert(index, cell?.call(i, index) as TCell);
+    }
+
+    // Корректируем индексы колонок справа
+    for (var i = index + 1; i < colsCount; i++) {
+      _cols[i]._index = i;
     }
   }
 
@@ -89,8 +127,19 @@ class Grid<TRow, TCol, TCell> extends IterableBase<GridRow<TRow, TCell>> {
     cell = cell ?? _cellCreator;   
 
     while (count-- > 0) {
-      insertCol(index, col: col?.call(index), cell: cell);
+      _cols.insert(index, GridCol<TCol>._(col?.call(index) as TCol, index));
+
+      // Создаём ячейки в новой колонке
+      for (var i = 0; i < rowsCount; i++) {
+        _rows[i]._cells.insert(index, cell?.call(i, index) as TCell);
+      }
+
       index++;
+    }
+
+    // Корректируем индексы колонок справа
+    for (var i = index; i < colsCount; i++) {
+      _cols[i]._index = i;
     }
   }
 
@@ -99,32 +148,28 @@ class Grid<TRow, TCol, TCell> extends IterableBase<GridRow<TRow, TCell>> {
 
 
   @override
-  Iterator<GridRow<TRow, TCell>> get iterator => _rows.iterator;
-
-
-  @override
   String toString([int? maxWidth]) {
     final buf = StringBuffer();
     var firstWidth = 0;
     final widths = List<int>.filled(colsCount, 0);
 
-    // Ширина столбца с названиями строк
-    for (var i = 0; i < rowsCount; i++) {
-      final value = (_rows[i].value ?? '[$i]').toString();
+    // Ширина колонки с названиями строк
+    for (var row in _rows) {
+      final value = (row.value ?? '[${row.index}]').toString();
       if (firstWidth < value.length) firstWidth = maxWidth == null ? value.length : min(value.length, maxWidth);
     }
 
-    // Ширина столбцов по названиям
-    for (var i = 0; i < colsCount; i++) {
-      final value = (_cols[i] ?? '[$i]').toString();
-      if (widths[i] < value.length) widths[i] = maxWidth == null ? value.length : min(value.length, maxWidth);
+    // Ширина колонок по названиям
+    for (var col in _cols) {
+      final value = (col.value ?? '[${col.index}]').toString();
+      if (widths[col.index] < value.length) widths[col.index] = maxWidth == null ? value.length : min(value.length, maxWidth);
     }
 
-    // Ширина столбцов по значениям ячеек
-    for (var row in this) {
-      for (var i = 0; i < colsCount; i++) {
-        final value = row[i].toString();
-        if (widths[i] < value.length) widths[i] = maxWidth == null ? value.length : min(value.length, maxWidth);
+    // Ширина колонок по значениям ячеек
+    for (var row in _rows) {
+      for (var col in _cols) {
+        final value = row[col.index].toString();
+        if (widths[col.index] < value.length) widths[col.index] = maxWidth == null ? value.length : min(value.length, maxWidth);
       }
     }
 
@@ -132,27 +177,26 @@ class Grid<TRow, TCol, TCell> extends IterableBase<GridRow<TRow, TCell>> {
 
     // Строка с названиями колонок
     buf.write(indent);
-    for (var i = 0; i < colsCount; i++) {
+    for (var col in _cols) {
       buf.write('  ');
-      buf.write((_cols[i] ?? '[$i]').toString().cutAndPad(widths[i]));
+      buf.write((col.value ?? '[${col.index}]').toString().cutAndPad(widths[col.index]));
     }
     buf.write('\n');
 
     buf.write(indent);
-    for (var i = 0; i < colsCount; i++) {
+    for (var col in _cols) {
       buf.write('  ');
-      buf.write('-' * widths[i]);
+      buf.write('-' * widths[col.index]);
     }
     buf.write('\n');
 
     // Таблица
-    for (var i = 0; i < rowsCount; i++) {
-      final row = _rows[i];
-      buf.write((row.value ?? '[$i]').toString().cutAndPadRight(firstWidth));
+    for (var row in _rows) {
+      buf.write((row.value ?? '[${row.index}]').toString().cutAndPadRight(firstWidth));
 
-      for (var j = 0; j < colsCount; j++) {
+      for (var col in _cols) {
         buf.write('  ');
-        buf.write(row[j].toString().cutAndPadRight(widths[j]));
+        buf.write(row[col.index].toString().cutAndPadRight(widths[col.index]));
       }
       buf.write('\n');
     }
